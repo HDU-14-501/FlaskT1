@@ -233,6 +233,189 @@ class IncomeAPI(MethodView):
         return jsonify({'message': 'Income deleted successfully'})
 
 
+# 支出视图类
+class OutlayAPI(MethodView):
+    def get(self, outlay_id=None):
+        if outlay_id:
+            outlay = models.Outlay.query.get(outlay_id)
+            if not outlay:
+                abort(404)
+            return jsonify({
+                'ID': outlay.ID,
+                'Time': outlay.Time,
+                'Amount': outlay.Amount,
+                'ClassifyID': outlay.ClassifyID,
+                'Member': outlay.Member,
+                'Place': outlay.Place,
+                'Remark': outlay.Remark
+            })
+        else:
+            outlays = models.Outlay.query.all()
+            return jsonify([{
+                'ID': outlay.ID,
+                'Time': outlay.Time,
+                'Amount': outlay.Amount,
+                'ClassifyID': outlay.ClassifyID,
+                'Member': outlay.Member,
+                'Place': outlay.Place,
+                'Remark': outlay.Remark
+            } for outlay in outlays])
+
+    def post(self):
+        data = request.get_json()
+        if not data or not all(key in data for key in ['Time', 'Amount', 'ClassifyID', 'Member', 'Place', 'Remark']):
+            abort(400)
+
+        new_outlay = models.Outlay(
+            Time=data['Time'],
+            Amount=data['Amount'],
+            ClassifyID=data['ClassifyID'],
+            Member=data['Member'],
+            Place=data['Place'],
+            Remark=data['Remark']
+        )
+        db.session.add(new_outlay)
+        db.session.commit()
+        return jsonify({'message': 'Outlay created successfully'}), 201
+
+    def put(self, outlay_id):
+        outlay = models.Outlay.query.get(outlay_id)
+        if not outlay:
+            abort(404)
+
+        data = request.get_json()
+        if 'Amount' in data:
+            outlay.Amount = data['Amount']
+        if 'Place' in data:
+            outlay.Place = data['Place']
+        if 'Remark' in data:
+            outlay.Remark = data['Remark']
+
+        db.session.commit()
+        return jsonify({'message': 'Outlay updated successfully'})
+
+    def delete(self, outlay_id):
+        outlay = models.Outlay.query.get(outlay_id)
+        if not outlay:
+            abort(404)
+        db.session.delete(outlay)
+        db.session.commit()
+        return jsonify({'message': 'Outlay deleted successfully'})
+
+
+# 收入分类视图类
+class IncomeClassifyAPI(MethodView):
+    def get(self, classify_id=None):
+        if classify_id:
+            classify = models.IncomeClassify.query.get(classify_id)
+            if not classify:
+                abort(404)
+            return jsonify({
+                'ID': classify.ID,
+                'Name': classify.Name,
+                'FatherClassifyID': classify.FatherClassifyID
+            })
+        else:
+            classifies = models.IncomeClassify.query.all()
+            return jsonify([{
+                'ID': classify.ID,
+                'Name': classify.Name,
+                'FatherClassifyID': classify.FatherClassifyID
+            } for classify in classifies])
+
+    def post(self):
+        data = request.get_json()
+        if not data or 'Name' not in data:
+            abort(400)
+
+        new_classify = models.IncomeClassify(
+            Name=data['Name'],
+            FatherClassifyID=data.get('FatherClassifyID')
+        )
+        db.session.add(new_classify)
+        db.session.commit()
+        return jsonify({'message': 'Income classify created successfully'}), 201
+
+    def put(self, classify_id):
+        classify = models.IncomeClassify.query.get(classify_id)
+        if not classify:
+            abort(404)
+
+        data = request.get_json()
+        if 'Name' in data:
+            classify.Name = data['Name']
+        if 'FatherClassifyID' in data:
+            classify.FatherClassifyID = data['FatherClassifyID']
+
+        db.session.commit()
+        return jsonify({'message': 'Income classify updated successfully'})
+
+    def delete(self, classify_id):
+        classify = models.IncomeClassify.query.get(classify_id)
+        if not classify:
+            abort(404)
+        db.session.delete(classify)
+        db.session.commit()
+        return jsonify({'message': 'Income classify deleted successfully'})
+
+
+# 支出分类视图类
+class OutlayClassifyAPI(MethodView):
+    def get(self, classify_id=None):
+        if classify_id:
+            classify = models.OutlayClassify.query.get(classify_id)
+            if not classify:
+                abort(404)
+            return jsonify({
+                'ID': classify.ID,
+                'Name': classify.Name,
+                'FatherClassifyID': classify.FatherClassifyID
+            })
+        else:
+            classifies = models.OutlayClassify.query.all()
+            return jsonify([{
+                'ID': classify.ID,
+                'Name': classify.Name,
+                'FatherClassifyID': classify.FatherClassifyID
+            } for classify in classifies])
+
+    def post(self):
+        data = request.get_json()
+        if not data or 'Name' not in data:
+            abort(400)
+
+        new_classify = models.OutlayClassify(
+            Name=data['Name'],
+            FatherClassifyID=data.get('FatherClassifyID')
+        )
+        db.session.add(new_classify)
+        db.session.commit()
+        return jsonify({'message': 'Outlay classify created successfully'}), 201
+
+    def put(self, classify_id):
+        classify = models.OutlayClassify.query.get(classify_id)
+        if not classify:
+            abort(404)
+
+        data = request.get_json()
+        if 'Name' in data:
+            classify.Name = data['Name']
+        if 'FatherClassifyID' in data:
+            classify.FatherClassifyID = data['FatherClassifyID']
+
+        db.session.commit()
+        return jsonify({'message': 'Outlay classify updated successfully'})
+
+    def delete(self, classify_id):
+        classify = models.OutlayClassify.query.get(classify_id)
+        if not classify:
+            abort(404)
+        db.session.delete(classify)
+        db.session.commit()
+        return jsonify({'message': 'Outlay classify deleted successfully'})
+
+
+
 # 注册 API 路由
 user_view = UserAPI.as_view('user_api')
 app.add_url_rule('/api/users/', defaults={'uid': None}, view_func=user_view, methods=['GET'])
@@ -248,6 +431,26 @@ income_view = IncomeAPI.as_view('income_api')
 app.add_url_rule('/api/incomes/', defaults={'income_id': None}, view_func=income_view, methods=['GET'])
 app.add_url_rule('/api/incomes/<int:income_id>', view_func=income_view, methods=['GET', 'PUT', 'DELETE'])
 app.add_url_rule('/api/incomes/', view_func=income_view, methods=['POST'])
+
+outlay_view = OutlayAPI.as_view('outlay_api')
+app.add_url_rule('/api/outlays/', defaults={'outlay_id': None}, view_func=outlay_view, methods=['GET'])
+app.add_url_rule('/api/outlays/<int:outlay_id>', view_func=outlay_view, methods=['GET', 'PUT', 'DELETE'])
+app.add_url_rule('/api/outlays/', view_func=outlay_view, methods=['POST'])
+
+income_classify_view = IncomeClassifyAPI.as_view('income_classify_api')
+app.add_url_rule('/api/income_classifies/', defaults={'classify_id': None}, view_func=income_classify_view,
+                 methods=['GET'])
+app.add_url_rule('/api/income_classifies/<int:classify_id>', view_func=income_classify_view,
+                 methods=['GET', 'PUT', 'DELETE'])
+app.add_url_rule('/api/income_classifies/', view_func=income_classify_view, methods=['POST'])
+
+outlay_classify_view = OutlayClassifyAPI.as_view('outlay_classify_api')
+app.add_url_rule('/api/outlay_classifies/', defaults={'classify_id': None}, view_func=outlay_classify_view,
+                 methods=['GET'])
+app.add_url_rule('/api/outlay_classifies/<int:classify_id>', view_func=outlay_classify_view,
+                 methods=['GET', 'PUT', 'DELETE'])
+app.add_url_rule('/api/outlay_classifies/', view_func=outlay_classify_view, methods=['POST'])
+
 
 if __name__ == '__main__':
     app.run()
