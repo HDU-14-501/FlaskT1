@@ -128,7 +128,7 @@ def init_db_data():
 
     # 添加收入数据
     incomes = [
-        Income(ID=30001, Time=datetime(2024, 8, 26, 12, 0), Amount=1000, ClassifyID=50001, Member=20001,
+        Income(ID=30002, Time=datetime(2024, 9, 26, 12, 0), Amount=1000, ClassifyID=50001, Member=20001,
                Place='杭州电子科技大学', Remark='无')
     ]
 

@@ -4,6 +4,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, create_access_token
 from extention import db, cors
 import models
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 
@@ -444,6 +445,100 @@ class OutlayClassifyAPI(MethodView):
         db.session.delete(classify)
         db.session.commit()
         return jsonify({'message': 'Outlay classify deleted successfully'})
+
+# 家庭成员统计视图类
+class FamilyMemberCountAPI(MethodView):
+    def get(self):
+        # 统计家庭成员数量
+        member_count = models.FamilyMember.query.count()
+        return jsonify({
+            'count': member_count
+        })
+
+
+# 本月收入统计视图类
+class MonthlyIncomeAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) - timedelta(seconds=1) if now.month < 12 else datetime(
+            now.year, 12, 31, 23, 59, 59)
+
+        # 查询本月收入总额
+        total_income = db.session.query(db.func.sum(models.Income.Amount)).filter(
+            models.Income.Time >= start_of_month,
+            models.Income.Time <= end_of_month
+        ).scalar()
+
+        # 如果没有收入记录，返回0
+        total_income = total_income or 0
+
+        return jsonify({
+            'total_income': total_income
+        })
+
+
+# 本月支出统计视图类
+class MonthlyOutlayAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) - timedelta(seconds=1) if now.month < 12 else datetime(
+            now.year, 12, 31, 23, 59, 59)
+
+        # 查询本月支出总额
+        total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time <= end_of_month
+        ).scalar()
+
+        # 如果没有支出记录，返回0
+        total_outlay = total_outlay or 0
+
+        return jsonify({
+            'total_outlay': total_outlay
+        })
+
+
+# 累计盈余统计视图类
+class TotalSurplusAPI(MethodView):
+    def get(self):
+        # 查询总收入
+        total_income = db.session.query(db.func.sum(models.Income.Amount)).scalar() or 0
+
+        # 查询总支出
+        total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).scalar() or 0
+
+        # 计算盈余
+        surplus = total_income - total_outlay
+
+        return jsonify({
+            'total_income': total_income,
+            'total_outlay': total_outlay,
+            'surplus': surplus
+        })
+
+
+# 注册 API 路由
+total_surplus_view = TotalSurplusAPI.as_view('total_surplus_api')
+app.add_url_rule('/api/surplus/total', view_func=total_surplus_view, methods=['GET'])
+
+# 注册 API 路由
+monthly_outlay_view = MonthlyOutlayAPI.as_view('monthly_outlay_api')
+app.add_url_rule('/api/outlay/total/month', view_func=monthly_outlay_view, methods=['GET'])
+
+# 注册 API 路由
+monthly_income_view = MonthlyIncomeAPI.as_view('monthly_income_api')
+app.add_url_rule('/api/income/total/month', view_func=monthly_income_view, methods=['GET'])
+
+# 注册 API 路由
+family_member_count_view = FamilyMemberCountAPI.as_view('family_member_count_api')
+app.add_url_rule('/api/family_members/count', view_func=family_member_count_view, methods=['GET'])
+
 
 
 # 注册 API 路由
