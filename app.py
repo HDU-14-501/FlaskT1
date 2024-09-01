@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, abort
 from flask.views import MethodView
 from flask_cors import CORS
+from flask_jwt_extended import JWTManager, create_access_token
 from extention import db, cors
 import models
 
@@ -9,24 +10,19 @@ app = Flask(__name__)
 
 class Config(object):
     """配置参数"""
-    # 设置连接数据库的URL
     user = 'FlaskVue'
     password = 'E7zBiJja7m2mTbkH'
     database = 'flaskvue'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql://%s:%s@124.221.22.19:3306/%s' % (user, password, database)
-
-    # 设置sqlalchemy自动更跟踪数据库
     SQLALCHEMY_TRACK_MODIFICATIONS = True
-
-    # 查询时会显示原始SQL语句
     app.config['SQLALCHEMY_ECHO'] = True
-
-    # 禁止自动提交数据处理
     app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = False
+    app.config['JWT_SECRET_KEY'] = '12312131312'  # 设置 JWT 密钥
 
 
 db.init_app(app)
-cors.init_app(app)
+cors.init_app(app, supports_credentials=True)
+jwt = JWTManager(app)
 
 
 @app.route('/')
@@ -42,6 +38,36 @@ def create():
 
 
 # REST API 部分
+
+# 登录视图类
+class LoginAPI(MethodView):
+    def post(self):
+        data = request.get_json()
+        if not data or not 'Username' in data or not 'Password' in data:
+            abort(400, description="Missing Username or Password")
+
+        username = data['Username']
+        password = data['Password']
+
+        # 在数据库中查找用户
+        user = models.User.query.filter_by(Username=username).first()
+
+        if not user or user.Password != password:
+            abort(401, description="Invalid Username or Password")
+
+        # 用户验证成功，生成 JWT 令牌
+        access_token = create_access_token(identity=user.UID)
+        return jsonify({
+            'token': access_token,
+            'user': {
+                'UID': user.UID,
+                'Username': user.Username,
+                'Name': user.Name,
+                'RegisterTime': user.RegisterTime,
+                'Level': user.Level
+            }
+        }), 200
+
 
 # 用户视图类
 class UserAPI(MethodView):
@@ -415,8 +441,10 @@ class OutlayClassifyAPI(MethodView):
         return jsonify({'message': 'Outlay classify deleted successfully'})
 
 
-
 # 注册 API 路由
+login_view = LoginAPI.as_view('login_api')
+app.add_url_rule('/api/login', view_func=login_view, methods=['POST'])
+
 user_view = UserAPI.as_view('user_api')
 app.add_url_rule('/api/users/', defaults={'uid': None}, view_func=user_view, methods=['GET'])
 app.add_url_rule('/api/users/<int:uid>', view_func=user_view, methods=['GET', 'PUT', 'DELETE'])
@@ -450,7 +478,6 @@ app.add_url_rule('/api/outlay_classifies/', defaults={'classify_id': None}, view
 app.add_url_rule('/api/outlay_classifies/<int:classify_id>', view_func=outlay_classify_view,
                  methods=['GET', 'PUT', 'DELETE'])
 app.add_url_rule('/api/outlay_classifies/', view_func=outlay_classify_view, methods=['POST'])
-
 
 if __name__ == '__main__':
     app.run()
