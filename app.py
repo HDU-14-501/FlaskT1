@@ -43,28 +43,33 @@ def create():
 class LoginAPI(MethodView):
     def post(self):
         data = request.get_json()
-        if not data or not 'Username' in data or not 'Password' in data:
+        print(data)
+        if not data or not 'username' in data or not 'password' in data:
             abort(400, description="Missing Username or Password")
 
-        username = data['Username']
-        password = data['Password']
+        username = data['username']
+        password = data['password']
 
         # 在数据库中查找用户
         user = models.User.query.filter_by(Username=username).first()
 
+        # 模拟错误，若用户名不存在或密码不正确
         if not user or user.Password != password:
-            abort(401, description="Invalid Username or Password")
+            return jsonify({
+                'code': 60204,
+                'message': 'Account and password are incorrect.'
+            }), 401
 
         # 用户验证成功，生成 JWT 令牌
-        access_token = create_access_token(identity=user.UID)
+        if user.Level == 1:
+            access_token = 'admin-token'
+        else:
+            access_token = 'editor-token'
+
         return jsonify({
-            'token': access_token,
-            'user': {
-                'UID': user.UID,
-                'Username': user.Username,
-                'Name': user.Name,
-                'RegisterTime': user.RegisterTime,
-                'Level': user.Level
+            'code': 20000,
+            'data': {
+                'token': access_token
             }
         }), 200
 
