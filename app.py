@@ -5,7 +5,7 @@ from flask_jwt_extended import JWTManager, create_access_token
 from extention import db, cors
 import models
 from datetime import datetime, timedelta
-
+from sqlalchemy import func
 app = Flask(__name__)
 
 
@@ -522,6 +522,41 @@ class TotalSurplusAPI(MethodView):
             'surplus': surplus
         })
 
+
+class IncomeEntryAPI(MethodView):
+    def get(self):
+        # 查询所有收入条目信息
+        entries = db.session.query(
+            models.Income.ID,
+            models.Income.Time,
+            models.Income.Amount,
+            models.IncomeClassify.Name.label('IncomeClassifyName'),
+            models.FamilyMember.Membername.label('Member'),
+            models.Income.Place,
+            func.IF(models.IncomeClassify.FatherClassifyID.is_(None), '父分类', '子分类').label('Type')
+        ).join(models.IncomeClassify, models.Income.ClassifyID == models.IncomeClassify.ID) \
+            .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id) \
+            .all()
+
+        # 将查询结果转换为字典列表
+        result = [
+            {
+                "ID": entry.ID,
+                "Time": entry.Time.isoformat(),
+                "Amount": entry.Amount,
+                "IncomeClassifyName": entry.IncomeClassifyName,
+                "Member": entry.Member,
+                "Place": entry.Place,
+                "Type": entry.Type
+            }
+            for entry in entries
+        ]
+
+        return jsonify(result)
+
+# 注册 API 路由
+income_entry_view = IncomeEntryAPI.as_view('income_entry_api')
+app.add_url_rule('/api/income_entries', view_func=income_entry_view, methods=['GET'])
 
 # 注册 API 路由
 total_surplus_view = TotalSurplusAPI.as_view('total_surplus_api')
