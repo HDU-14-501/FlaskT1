@@ -452,7 +452,7 @@ class FamilyMemberCountAPI(MethodView):
         # 统计家庭成员数量
         member_count = models.FamilyMember.query.count()
         return jsonify({
-            'count': member_count
+            'count': member_count - 1
         })
 
 
@@ -553,6 +553,50 @@ class IncomeEntryAPI(MethodView):
         ]
 
         return jsonify(result)
+
+
+class MonthlyOutlayByCategoryAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间
+        start_of_month = datetime(now.year, now.month, 1)
+
+        # 查询每个家庭成员在本月每个大类的支出总额
+        # 先获取所有的父分类（大类）
+        parent_categories = db.session.query(models.OutlayClassify).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
+
+        # 初始化返回的数据结构
+        data = []
+
+        # 查询每个家庭成员在每个大类中的支出总额
+        for member in db.session.query(models.FamilyMember).all():
+            member_data = {
+                "name": member.Membername,
+                "value": []
+            }
+            for category in parent_categories:
+                # 计算该成员在该大类中的支出总额
+                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
+                    models.OutlayClassify,
+                    models.Outlay.ClassifyID == models.OutlayClassify.ID
+                ).filter(
+                    models.Outlay.Member == member.Id,
+                    models.Outlay.Time >= start_of_month,
+                    models.OutlayClassify.FatherClassifyID == category.ID
+                ).scalar() or 0
+                member_data["value"].append(total_outlay)
+
+            # 将结果添加到数据中
+            data.append(member_data)
+
+        return jsonify(data)
+
+# 注册 API 路由
+monthly_outlay_by_category_view = MonthlyOutlayByCategoryAPI.as_view('monthly_outlay_by_category_api')
+app.add_url_rule('/api/outlay/total/by_category', view_func=monthly_outlay_by_category_view, methods=['GET'])
+
+
 
 # 注册 API 路由
 income_entry_view = IncomeEntryAPI.as_view('income_entry_api')
