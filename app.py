@@ -575,6 +575,7 @@ class IncomeOutlayEntryAPI(MethodView):
             models.IncomeClassify.Name.label('ClassifyName'),
             models.FamilyMember.Membername.label('Member'),
             models.Income.Place.label('Place'),
+            models.Income.Remark.label('Remark'),  # 添加备注字段
             db.literal_column("'Income'").label('Type')  # 标记为收入
         ).join(models.IncomeClassify, models.Income.ClassifyID == models.IncomeClassify.ID) \
          .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id)
@@ -587,7 +588,8 @@ class IncomeOutlayEntryAPI(MethodView):
             models.OutlayClassify.Name.label('ClassifyName'),
             models.FamilyMember.Membername.label('Member'),
             models.Outlay.Place.label('Place'),
-            db.literal_column("'Expense'").label('Type')  # 标记为支出
+            models.Outlay.Remark.label('Remark'),  # 添加备注字段
+            db.literal_column("'Outlay'").label('Type')  # 标记为支出
         ).join(models.OutlayClassify, models.Outlay.ClassifyID == models.OutlayClassify.ID) \
          .join(models.FamilyMember, models.Outlay.Member == models.FamilyMember.Id)
 
@@ -603,6 +605,7 @@ class IncomeOutlayEntryAPI(MethodView):
                 "ClassifyName": entry.ClassifyName,
                 "Member": entry.Member,
                 "Place": entry.Place,
+                "Remark": entry.Remark,  # 添加备注字段到结果
                 "Type": entry.Type
             }
             for entry in entries
@@ -611,12 +614,13 @@ class IncomeOutlayEntryAPI(MethodView):
         return jsonify(result)
 
 
+
 class CreateIncomeOutlayEntryAPI(MethodView):
     def post(self):
         data = request.get_json()
         entry_type = data.get('Type')
-
-        if entry_type == '收入':
+        print(data)
+        if entry_type == 'Income':
             new_entry = models.Income(
                 Time=datetime.fromisoformat(data['Time']),
                 Amount=data['Amount'],
@@ -627,7 +631,7 @@ class CreateIncomeOutlayEntryAPI(MethodView):
             )
             db.session.add(new_entry)
 
-        elif entry_type == '支出':
+        elif entry_type == 'Outlay':
             new_entry = models.Outlay(
                 Time=datetime.fromisoformat(data['Time']),
                 Amount=data['Amount'],
@@ -649,8 +653,8 @@ class UpdateDeleteIncomeOutlayEntryAPI(MethodView):
     def put(self, entry_id):
         data = request.get_json()
         entry_type = data.get('Type')
-
-        if entry_type == '收入':
+        print(data)
+        if entry_type == '收入' or entry_type == 'Income':
             entry = models.Income.query.get(entry_id)
             if not entry:
                 abort(404, description="Income record not found")
@@ -668,7 +672,7 @@ class UpdateDeleteIncomeOutlayEntryAPI(MethodView):
             if 'Remark' in data:
                 entry.Remark = data['Remark']
 
-        elif entry_type == '支出':
+        elif entry_type == '支出' or entry_type == 'Outlay':
             entry = models.Outlay.query.get(entry_id)
             if not entry:
                 abort(404, description="Outlay record not found")
@@ -695,13 +699,13 @@ class UpdateDeleteIncomeOutlayEntryAPI(MethodView):
     def delete(self, entry_id):
         entry_type = request.args.get('Type')
 
-        if entry_type == '收入':
+        if entry_type == '收入' or entry_type == 'Income':
             entry = models.Income.query.get(entry_id)
             if not entry:
                 abort(404, description="Income record not found")
             db.session.delete(entry)
 
-        elif entry_type == '支出':
+        elif entry_type == '支出' or entry_type == 'Outlay':
             entry = models.Outlay.query.get(entry_id)
             if not entry:
                 abort(404, description="Outlay record not found")
