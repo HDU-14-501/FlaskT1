@@ -523,38 +523,6 @@ class TotalSurplusAPI(MethodView):
         })
 
 
-class IncomeEntryAPI(MethodView):
-    def get(self):
-        # 查询所有收入条目信息
-        entries = db.session.query(
-            models.Income.ID,
-            models.Income.Time,
-            models.Income.Amount,
-            models.IncomeClassify.Name.label('IncomeClassifyName'),
-            models.FamilyMember.Membername.label('Member'),
-            models.Income.Place,
-            func.IF(models.IncomeClassify.FatherClassifyID.is_(None), '父分类', '子分类').label('Type')
-        ).join(models.IncomeClassify, models.Income.ClassifyID == models.IncomeClassify.ID) \
-            .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id) \
-            .all()
-
-        # 将查询结果转换为字典列表
-        result = [
-            {
-                "ID": entry.ID,
-                "Time": entry.Time.isoformat(),
-                "Amount": entry.Amount,
-                "IncomeClassifyName": entry.IncomeClassifyName,
-                "Member": entry.Member,
-                "Place": entry.Place,
-                "Type": entry.Type
-            }
-            for entry in entries
-        ]
-
-        return jsonify(result)
-
-
 class MonthlyOutlayByCategoryAPI(MethodView):
     def get(self):
         # 获取当前时间
@@ -562,15 +530,16 @@ class MonthlyOutlayByCategoryAPI(MethodView):
         # 计算本月的起始时间
         start_of_month = datetime(now.year, now.month, 1)
 
-        # 查询每个家庭成员在本月每个大类的支出总额
-        # 先获取所有的父分类（大类）
+        # 查询所有的父分类（大类）
         parent_categories = db.session.query(models.OutlayClassify).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
 
         # 初始化返回的数据结构
         data = []
 
-        # 查询每个家庭成员在每个大类中的支出总额
-        for member in db.session.query(models.FamilyMember).all():
+        # 查询每个家庭成员在每个大类中的支出总额，但排除“一家之主”
+        members = db.session.query(models.FamilyMember).filter(models.FamilyMember.Membername != '一家之主').all()
+
+        for member in members:
             member_data = {
                 "name": member.Membername,
                 "value": []
@@ -592,15 +561,254 @@ class MonthlyOutlayByCategoryAPI(MethodView):
 
         return jsonify(data)
 
+
+
+from sqlalchemy import text
+
+class IncomeOutlayEntryAPI(MethodView):
+    def get(self):
+        # 查询所有收入条目信息
+        income_entries = db.session.query(
+            models.Income.ID.label('ID'),
+            models.Income.Time.label('Time'),
+            models.Income.Amount.label('Amount'),
+            models.IncomeClassify.Name.label('ClassifyName'),
+            models.FamilyMember.Membername.label('Member'),
+            models.Income.Place.label('Place'),
+            db.literal_column("'Income'").label('Type')  # 标记为收入
+        ).join(models.IncomeClassify, models.Income.ClassifyID == models.IncomeClassify.ID) \
+         .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id)
+
+        # 查询所有支出条目信息
+        outlay_entries = db.session.query(
+            models.Outlay.ID.label('ID'),
+            models.Outlay.Time.label('Time'),
+            models.Outlay.Amount.label('Amount'),
+            models.OutlayClassify.Name.label('ClassifyName'),
+            models.FamilyMember.Membername.label('Member'),
+            models.Outlay.Place.label('Place'),
+            db.literal_column("'Expense'").label('Type')  # 标记为支出
+        ).join(models.OutlayClassify, models.Outlay.ClassifyID == models.OutlayClassify.ID) \
+         .join(models.FamilyMember, models.Outlay.Member == models.FamilyMember.Id)
+
+        # 合并收入和支出的查询结果，并按时间排序
+        entries = income_entries.union_all(outlay_entries).order_by(text('Time')).all()
+
+        # 将查询结果转换为字典列表
+        result = [
+            {
+                "ID": entry.ID,
+                "Time": entry.Time.isoformat(),
+                "Amount": entry.Amount,
+                "ClassifyName": entry.ClassifyName,
+                "Member": entry.Member,
+                "Place": entry.Place,
+                "Type": entry.Type
+            }
+            for entry in entries
+        ]
+
+        return jsonify(result)
+
+
+class CreateIncomeOutlayEntryAPI(MethodView):
+    def post(self):
+        data = request.get_json()
+        entry_type = data.get('Type')
+
+        if entry_type == '收入':
+            new_entry = models.Income(
+                Time=datetime.fromisoformat(data['Time']),
+                Amount=data['Amount'],
+                ClassifyID=data['ClassifyID'],
+                Member=data['Member'],
+                Place=data['Place'],
+                Remark=data.get('Remark', '')
+            )
+            db.session.add(new_entry)
+
+        elif entry_type == '支出':
+            new_entry = models.Outlay(
+                Time=datetime.fromisoformat(data['Time']),
+                Amount=data['Amount'],
+                ClassifyID=data['ClassifyID'],
+                Member=data['Member'],
+                Place=data['Place'],
+                Remark=data.get('Remark', '')
+            )
+            db.session.add(new_entry)
+
+        else:
+            abort(400, description="Invalid entry type")
+
+        db.session.commit()
+        return jsonify({'message': 'Record created successfully'}), 201
+
+
+class UpdateDeleteIncomeOutlayEntryAPI(MethodView):
+    def put(self, entry_id):
+        data = request.get_json()
+        entry_type = data.get('Type')
+
+        if entry_type == '收入':
+            entry = models.Income.query.get(entry_id)
+            if not entry:
+                abort(404, description="Income record not found")
+
+            if 'Time' in data:
+                entry.Time = datetime.fromisoformat(data['Time'])
+            if 'Amount' in data:
+                entry.Amount = data['Amount']
+            if 'ClassifyID' in data:
+                entry.ClassifyID = data['ClassifyID']
+            if 'Member' in data:
+                entry.Member = data['Member']
+            if 'Place' in data:
+                entry.Place = data['Place']
+            if 'Remark' in data:
+                entry.Remark = data['Remark']
+
+        elif entry_type == '支出':
+            entry = models.Outlay.query.get(entry_id)
+            if not entry:
+                abort(404, description="Outlay record not found")
+
+            if 'Time' in data:
+                entry.Time = datetime.fromisoformat(data['Time'])
+            if 'Amount' in data:
+                entry.Amount = data['Amount']
+            if 'ClassifyID' in data:
+                entry.ClassifyID = data['ClassifyID']
+            if 'Member' in data:
+                entry.Member = data['Member']
+            if 'Place' in data:
+                entry.Place = data['Place']
+            if 'Remark' in data:
+                entry.Remark = data['Remark']
+
+        else:
+            abort(400, description="Invalid entry type")
+
+        db.session.commit()
+        return jsonify({'message': 'Record updated successfully'}), 200
+
+    def delete(self, entry_id):
+        entry_type = request.args.get('Type')
+
+        if entry_type == '收入':
+            entry = models.Income.query.get(entry_id)
+            if not entry:
+                abort(404, description="Income record not found")
+            db.session.delete(entry)
+
+        elif entry_type == '支出':
+            entry = models.Outlay.query.get(entry_id)
+            if not entry:
+                abort(404, description="Outlay record not found")
+            db.session.delete(entry)
+
+        else:
+            abort(400, description="Invalid entry type")
+
+        db.session.commit()
+        return jsonify({'message': 'Record deleted successfully'}), 200
+
+
+class FamilyTotalOutlayByCategoryAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间
+        start_of_month = datetime(now.year, now.month, 1)
+
+        # 查询所有父级支出分类（大类）
+        parent_categories = db.session.query(
+            models.OutlayClassify.ID,
+            models.OutlayClassify.Name
+        ).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
+
+        # 初始化返回数据
+        result = []
+
+        # 遍历所有大类，计算本月每个大类的总支出
+        for category in parent_categories:
+            total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
+                models.OutlayClassify,
+                models.Outlay.ClassifyID == models.OutlayClassify.ID
+            ).filter(
+                models.OutlayClassify.FatherClassifyID == category.ID,
+                models.Outlay.Time >= start_of_month,  # 过滤本月的记录
+                models.Outlay.Time <= now  # 确保统计到当前时间
+            ).scalar() or 0
+
+            # 将结果添加到返回列表中
+            result.append({
+                "CategoryName": category.Name,
+                "TotalOutlay": total_outlay
+            })
+
+        return jsonify(result)
+
+
+class WeeklyOutlayByCategoryAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算七天前的日期
+        seven_days_ago = now - timedelta(days=7)
+
+        # 查询所有的父分类（大类）
+        parent_categories = db.session.query(models.OutlayClassify).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
+
+        # 初始化返回的数据结构
+        data = []
+
+        # 查询每个家庭成员在近七天每个大类中的支出总额，排除“一家之主”
+        members = db.session.query(models.FamilyMember).filter(models.FamilyMember.Membername != '一家之主').all()
+
+        for member in members:
+            member_data = {
+                "name": member.Membername,
+                "value": []
+            }
+            for category in parent_categories:
+                # 计算该成员在该大类中的支出总额
+                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
+                    models.OutlayClassify,
+                    models.Outlay.ClassifyID == models.OutlayClassify.ID
+                ).filter(
+                    models.Outlay.Member == member.Id,
+                    models.Outlay.Time >= seven_days_ago,
+                    models.Outlay.Time <= now,
+                    models.OutlayClassify.FatherClassifyID == category.ID
+                ).scalar() or 0
+                member_data["value"].append(total_outlay)
+
+            # 将结果添加到数据中
+            data.append(member_data)
+
+        return jsonify(data)
+
+# 注册 API 路由
+app.add_url_rule('/api/weekly_outlay_by_category', view_func=WeeklyOutlayByCategoryAPI.as_view('weekly_outlay_by_category_api'), methods=['GET'])
+
+
+# 注册 API 路由
+app.add_url_rule('/api/family_total_outlay_by_category', view_func=FamilyTotalOutlayByCategoryAPI.as_view('family_total_outlay_by_category_api'), methods=['GET'])
+
+
+# 注册 API 路由
+app.add_url_rule('/api/income_outlay_entries', view_func=IncomeOutlayEntryAPI.as_view('income_outlay_entry_api'), methods=['GET'])
+app.add_url_rule('/api/income_outlay_entries', view_func=CreateIncomeOutlayEntryAPI.as_view('create_income_outlay_entry_api'), methods=['POST'])
+app.add_url_rule('/api/income_outlay_entries/<int:entry_id>', view_func=UpdateDeleteIncomeOutlayEntryAPI.as_view('update_delete_income_outlay_entry_api'), methods=['PUT', 'DELETE'])
+
+
+
+
 # 注册 API 路由
 monthly_outlay_by_category_view = MonthlyOutlayByCategoryAPI.as_view('monthly_outlay_by_category_api')
 app.add_url_rule('/api/outlay/total/by_category', view_func=monthly_outlay_by_category_view, methods=['GET'])
 
-
-
-# 注册 API 路由
-income_entry_view = IncomeEntryAPI.as_view('income_entry_api')
-app.add_url_rule('/api/income_entries', view_func=income_entry_view, methods=['GET'])
 
 # 注册 API 路由
 total_surplus_view = TotalSurplusAPI.as_view('total_surplus_api')
