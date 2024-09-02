@@ -757,37 +757,81 @@ class WeeklyOutlayByCategoryAPI(MethodView):
         # 计算七天前的日期
         seven_days_ago = now - timedelta(days=7)
 
-        # 查询所有的父分类（大类）
-        parent_categories = db.session.query(models.OutlayClassify).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
-
         # 初始化返回的数据结构
         data = []
 
-        # 查询每个家庭成员在近七天每个大类中的支出总额，排除“一家之主”
+        # 查询每个家庭成员在近七天中的每天支出总额，排除“一家之主”
         members = db.session.query(models.FamilyMember).filter(models.FamilyMember.Membername != '一家之主').all()
 
         for member in members:
             member_data = {
                 "name": member.Membername,
-                "value": []
+                "daily_outlays": []
             }
-            for category in parent_categories:
-                # 计算该成员在该大类中的支出总额
-                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
-                    models.OutlayClassify,
-                    models.Outlay.ClassifyID == models.OutlayClassify.ID
-                ).filter(
+            for i in range(7):
+                day = seven_days_ago + timedelta(days=i)
+                next_day = day + timedelta(days=1)
+
+                # 计算该成员在当天的支出总额
+                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
                     models.Outlay.Member == member.Id,
-                    models.Outlay.Time >= seven_days_ago,
-                    models.Outlay.Time <= now,
-                    models.OutlayClassify.FatherClassifyID == category.ID
+                    models.Outlay.Time >= day,
+                    models.Outlay.Time < next_day
                 ).scalar() or 0
-                member_data["value"].append(total_outlay)
+
+                member_data["daily_outlays"].append({
+                    "date": day.strftime('%Y-%m-%d'),
+                    "total_outlay": total_outlay
+                })
 
             # 将结果添加到数据中
             data.append(member_data)
 
         return jsonify(data)
+
+
+class WeeklyIncomeAndOutlayByDayAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算七天前的日期
+        seven_days_ago = now - timedelta(days=7)
+
+        # 初始化返回的数据结构
+        data = []
+
+        # 按天统计收入和支出
+        for i in range(7):
+            day = seven_days_ago + timedelta(days=i)
+            next_day = day + timedelta(days=1)
+
+            # 计算当天的收入总额
+            total_income = db.session.query(db.func.sum(models.Income.Amount)).filter(
+                models.Income.Time >= day,
+                models.Income.Time < next_day
+            ).scalar() or 0
+
+            # 计算当天的支出总额
+            total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+                models.Outlay.Time >= day,
+                models.Outlay.Time < next_day
+            ).scalar() or 0
+
+            # 将结果添加到数据中
+            data.append({
+                "date": day.strftime('%Y-%m-%d'),
+                "total_income": total_income,
+                "total_outlay": total_outlay
+            })
+
+        return jsonify(data)
+
+
+
+# 注册 API 路由
+app.add_url_rule('/api/weekly_income_outlay', view_func=WeeklyIncomeAndOutlayByDayAPI.as_view('weekly_income_outlay_api'), methods=['GET'])
+
+
 
 # 注册 API 路由
 app.add_url_rule('/api/weekly_outlay_by_category', view_func=WeeklyOutlayByCategoryAPI.as_view('weekly_outlay_by_category_api'), methods=['GET'])
