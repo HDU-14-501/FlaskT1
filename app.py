@@ -1116,6 +1116,43 @@ class MonthlyTopOutlayItemAPI(MethodView):
         else:
             return jsonify({"Item": None, "TotalOutlay": 0})
 
+
+# 统计今日支出
+class TodayTotalOutlayAPI(MethodView):
+    def get(self):
+        # 获取当前日期
+        today = datetime.now().date()
+
+        # 计算今日的总支出
+        total_outlay = db.session.query(
+            db.func.sum(models.Outlay.Amount)
+        ).filter(
+            func.date(models.Outlay.Time) == today
+        ).scalar() or 0
+
+        return jsonify({"TotalOutlay": total_outlay})
+
+# 注册 API 路由
+app.add_url_rule('/api/today_total_outlay', view_func=TodayTotalOutlayAPI.as_view('today_total_outlay_api'))
+
+# 统计今日收入
+class TodayTotalIncomeAPI(MethodView):
+    def get(self):
+        # 获取当前日期
+        today = datetime.now().date()
+
+        # 计算今日的总收入
+        total_income = db.session.query(
+            db.func.sum(models.Income.Amount)
+        ).filter(
+            func.date(models.Income.Time) == today
+        ).scalar() or 0
+
+        return jsonify({"TotalIncome": total_income})
+
+# 注册 API 路由
+app.add_url_rule('/api/today_total_income', view_func=TodayTotalIncomeAPI.as_view('today_total_income_api'))
+
 # 添加API路由
 app.add_url_rule('/api/today_top_outlay_location', view_func=TodayTopOutlayLocationAPI.as_view('today_top_outlay_location_api'))
 app.add_url_rule('/api/today_top_outlay_category', view_func=TodayTopOutlayCategoryAPI.as_view('today_top_outlay_category_api'))
