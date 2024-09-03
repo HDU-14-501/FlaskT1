@@ -532,44 +532,48 @@ class TotalSurplusAPI(MethodView):
         })
 
 
-class MonthlyOutlayByCategoryAPI(MethodView):
+class MonthlyTopOutlayCategoryAPI(MethodView):
     def get(self):
         # 获取当前时间
         now = datetime.now()
-        # 计算本月的起始时间
+        # 计算本月的起始时间和结束时间
         start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
 
-        # 查询所有的父分类（大类）
-        parent_categories = db.session.query(models.OutlayClassify).filter(
-            models.OutlayClassify.FatherClassifyID.is_(None)).all()
+        # 获取所有大类（没有父分类的分类）
+        parent_categories = db.session.query(
+            models.OutlayClassify.ID,
+            models.OutlayClassify.Name
+        ).filter(
+            models.OutlayClassify.FatherClassifyID.is_(None)
+        ).all()
 
-        # 初始化返回的数据结构
-        data = []
+        # 初始化变量以存储最大支出的大类和金额
+        max_category = None
+        max_total_outlay = 0
 
-        # 查询每个家庭成员在每个大类中的支出总额，但排除“一家之主”
-        members = db.session.query(models.FamilyMember).filter(models.FamilyMember.Membername != '一家之主').all()
+        for category in parent_categories:
+            # 获取该大类及其所有子类ID
+            subcategory_ids = db.session.query(models.OutlayClassify.ID).filter(
+                models.OutlayClassify.FatherClassifyID == category.ID
+            ).all()
+            subcategory_ids = [id for (id,) in subcategory_ids]
 
-        for member in members:
-            member_data = {
-                "name": member.Membername,
-                "value": []
-            }
-            for category in parent_categories:
-                # 计算该成员在该大类中的支出总额
-                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
-                    models.OutlayClassify,
-                    models.Outlay.ClassifyID == models.OutlayClassify.ID
-                ).filter(
-                    models.Outlay.Member == member.Id,
-                    models.Outlay.Time >= start_of_month,
-                    models.OutlayClassify.FatherClassifyID == category.ID
-                ).scalar() or 0
-                member_data["value"].append(total_outlay)
+            # 查询该大类及其所有子类的支出总额
+            total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+                models.Outlay.Time >= start_of_month,
+                models.Outlay.Time < end_of_month,
+                models.Outlay.ClassifyID.in_(subcategory_ids + [category.ID])
+            ).scalar() or 0
 
-            # 将结果添加到数据中
-            data.append(member_data)
+            # 检查是否是最大支出的大类
+            if total_outlay > max_total_outlay:
+                max_total_outlay = total_outlay
+                max_category = category.Name
 
-        return jsonify(data)
+        # 返回最大支出的大类及其总额
+        return jsonify({"TopCategory": max_category, "TotalOutlay": max_total_outlay})
+
 
 
 from sqlalchemy import text
@@ -1091,8 +1095,8 @@ class MonthlyTopOutlayLocationAPI(MethodView):
         else:
             return jsonify({"Place": None, "TotalOutlay": 0})
 
-# 本月支出最多的项目
-class MonthlyTopOutlayItemAPI(MethodView):
+# 本月支出最多的分类
+class MonthlyOutlayByCategoryAPI(MethodView):
     def get(self):
         # 获取当前时间
         now = datetime.now()
@@ -1100,21 +1104,41 @@ class MonthlyTopOutlayItemAPI(MethodView):
         start_of_month = datetime(now.year, now.month, 1)
         end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
 
-        # 查询本月支出最多的分类
-        top_item = db.session.query(
-            models.OutlayClassify.Name,
-            db.func.sum(models.Outlay.Amount).label('total_outlay')
-        ).join(
-            models.OutlayClassify, models.Outlay.ClassifyID == models.OutlayClassify.ID
+        # 获取所有大类（没有父分类的分类）
+        parent_categories = db.session.query(
+            models.OutlayClassify.ID,
+            models.OutlayClassify.Name
         ).filter(
-            models.Outlay.Time >= start_of_month,
-            models.Outlay.Time < end_of_month
-        ).group_by(models.OutlayClassify.Name).order_by(db.func.sum(models.Outlay.Amount).desc()).first()
+            models.OutlayClassify.FatherClassifyID.is_(None)
+        ).all()
 
-        if top_item:
-            return jsonify({"Item": top_item.Name, "TotalOutlay": top_item.total_outlay})
-        else:
-            return jsonify({"Item": None, "TotalOutlay": 0})
+        # 初始化变量以存储最大支出的大类和金额
+        max_category = None
+        max_total_outlay = 0
+
+        for category in parent_categories:
+            # 获取该大类及其所有子类ID
+            subcategory_ids = db.session.query(models.OutlayClassify.ID).filter(
+                models.OutlayClassify.FatherClassifyID == category.ID
+            ).all()
+            subcategory_ids = [id for (id,) in subcategory_ids]
+
+            # 查询该大类及其所有子类的支出总额
+            total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+                models.Outlay.Time >= start_of_month,
+                models.Outlay.Time < end_of_month,
+                models.Outlay.ClassifyID.in_(subcategory_ids + [category.ID])
+            ).scalar() or 0
+
+            # 检查是否是最大支出的大类
+            if total_outlay > max_total_outlay:
+                max_total_outlay = total_outlay
+                max_category = category.Name
+
+        # 返回最大支出的大类及其总额
+        return jsonify({"TopCategory": max_category, "TotalOutlay": max_total_outlay})
+
+
 
 
 # 统计今日支出
@@ -1157,7 +1181,7 @@ app.add_url_rule('/api/today_total_income', view_func=TodayTotalIncomeAPI.as_vie
 app.add_url_rule('/api/today_top_outlay_location', view_func=TodayTopOutlayLocationAPI.as_view('today_top_outlay_location_api'))
 app.add_url_rule('/api/today_top_outlay_category', view_func=TodayTopOutlayCategoryAPI.as_view('today_top_outlay_category_api'))
 app.add_url_rule('/api/monthly_top_outlay_location', view_func=MonthlyTopOutlayLocationAPI.as_view('monthly_top_outlay_location_api'))
-app.add_url_rule('/api/monthly_top_outlay_item', view_func=MonthlyTopOutlayItemAPI.as_view('monthly_top_outlay_item_api'))
+app.add_url_rule('/api/monthly_top_outlay_item', view_func=MonthlyOutlayByCategoryAPI.as_view('monthly_top_outlay_item_api'))
 
 
 # 添加API路由
