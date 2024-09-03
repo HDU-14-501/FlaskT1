@@ -85,6 +85,7 @@ class UserAPI(MethodView):
             return jsonify({
                 'UID': user.UID,
                 'Username': user.Username,
+                'Password': user.Password,
                 'Name': user.Name,
                 'RegisterTime': user.RegisterTime,
                 'Level': user.Level
@@ -94,6 +95,7 @@ class UserAPI(MethodView):
             return jsonify([{
                 'UID': user.UID,
                 'Username': user.Username,
+                'Password': user.Password,
                 'Name': user.Name,
                 'RegisterTime': user.RegisterTime,
                 'Level': user.Level
