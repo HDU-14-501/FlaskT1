@@ -6,6 +6,12 @@ from extention import db, cors
 import models
 from datetime import datetime, timedelta
 from sqlalchemy import func
+import random
+from http import HTTPStatus
+import dashscope
+from dashscope import Generation
+
+dashscope.api_key = "sk-68bc5e7308504a6caf8ace89d9a2ed5e"
 app = Flask(__name__)
 
 
@@ -448,6 +454,7 @@ class OutlayClassifyAPI(MethodView):
         db.session.commit()
         return jsonify({'message': 'Outlay classify deleted successfully'})
 
+
 # 家庭成员统计视图类
 class FamilyMemberCountAPI(MethodView):
     def get(self):
@@ -533,7 +540,8 @@ class MonthlyOutlayByCategoryAPI(MethodView):
         start_of_month = datetime(now.year, now.month, 1)
 
         # 查询所有的父分类（大类）
-        parent_categories = db.session.query(models.OutlayClassify).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
+        parent_categories = db.session.query(models.OutlayClassify).filter(
+            models.OutlayClassify.FatherClassifyID.is_(None)).all()
 
         # 初始化返回的数据结构
         data = []
@@ -564,8 +572,8 @@ class MonthlyOutlayByCategoryAPI(MethodView):
         return jsonify(data)
 
 
-
 from sqlalchemy import text
+
 
 class IncomeOutlayEntryAPI(MethodView):
     def get(self):
@@ -580,7 +588,7 @@ class IncomeOutlayEntryAPI(MethodView):
             models.Income.Remark.label('Remark'),  # 添加备注字段
             db.literal_column("'Income'").label('Type')  # 标记为收入
         ).join(models.IncomeClassify, models.Income.ClassifyID == models.IncomeClassify.ID) \
-         .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id)
+            .join(models.FamilyMember, models.Income.Member == models.FamilyMember.Id)
 
         # 查询所有支出条目信息
         outlay_entries = db.session.query(
@@ -593,7 +601,7 @@ class IncomeOutlayEntryAPI(MethodView):
             models.Outlay.Remark.label('Remark'),  # 添加备注字段
             db.literal_column("'Outlay'").label('Type')  # 标记为支出
         ).join(models.OutlayClassify, models.Outlay.ClassifyID == models.OutlayClassify.ID) \
-         .join(models.FamilyMember, models.Outlay.Member == models.FamilyMember.Id)
+            .join(models.FamilyMember, models.Outlay.Member == models.FamilyMember.Id)
 
         # 合并收入和支出的查询结果，并按时间排序
         entries = income_entries.union_all(outlay_entries).order_by(text('Time')).all()
@@ -614,7 +622,6 @@ class IncomeOutlayEntryAPI(MethodView):
         ]
 
         return jsonify(result)
-
 
 
 class CreateIncomeOutlayEntryAPI(MethodView):
@@ -887,36 +894,69 @@ class DailyIncomeAPI(MethodView):
 
         return jsonify(result)
 
+class ChatAPI(MethodView):
+    def post(self):
+        data = request.get_json()
+        print(data)
+        if not data or not 'content' in data:
+            abort(400, description="Missing content")
+
+        user_input = data['content']
+
+        messages = [{'role': 'system', 'content': 'You are a helpful assistant.'},
+                    {'role': 'user', 'content': user_input}]
+
+        try:
+            response = Generation.call(
+                model="qwen-turbo",
+                messages=messages,
+                seed=random.randint(1, 10000),
+                temperature=0.8,
+                top_p=0.8,
+                top_k=50,
+                result_format='message'
+            )
+
+            if response.status_code == HTTPStatus.OK:
+                return jsonify(response), HTTPStatus.OK
+            else:
+                return jsonify({
+                    'code': response.status_code,
+                    'message': response.message
+                }), response.status_code
+        except Exception as e:
+            return jsonify({"code": 50000, "message": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR
+
 app.add_url_rule('/api/daily_income', view_func=DailyIncomeAPI.as_view('daily_income_api'))
 
 # 将API路由添加到Flask应用程序中
 app.add_url_rule('/api/daily_outlay_by_member', view_func=DailyOutlayByMemberAPI.as_view('daily_outlay_by_member_api'))
 
 # 注册 API 路由
-app.add_url_rule('/api/weekly_income_outlay', view_func=WeeklyIncomeAndOutlayByDayAPI.as_view('weekly_income_outlay_api'), methods=['GET'])
-
-
-
-# 注册 API 路由
-app.add_url_rule('/api/weekly_outlay_by_category', view_func=WeeklyOutlayByCategoryAPI.as_view('weekly_outlay_by_category_api'), methods=['GET'])
-
+app.add_url_rule('/api/weekly_income_outlay',
+                 view_func=WeeklyIncomeAndOutlayByDayAPI.as_view('weekly_income_outlay_api'), methods=['GET'])
 
 # 注册 API 路由
-app.add_url_rule('/api/family_total_outlay_by_category', view_func=FamilyTotalOutlayByCategoryAPI.as_view('family_total_outlay_by_category_api'), methods=['GET'])
-
+app.add_url_rule('/api/weekly_outlay_by_category',
+                 view_func=WeeklyOutlayByCategoryAPI.as_view('weekly_outlay_by_category_api'), methods=['GET'])
 
 # 注册 API 路由
-app.add_url_rule('/api/income_outlay_entries', view_func=IncomeOutlayEntryAPI.as_view('income_outlay_entry_api'), methods=['GET'])
-app.add_url_rule('/api/income_outlay_entries', view_func=CreateIncomeOutlayEntryAPI.as_view('create_income_outlay_entry_api'), methods=['POST'])
-app.add_url_rule('/api/income_outlay_entries/<int:entry_id>', view_func=UpdateDeleteIncomeOutlayEntryAPI.as_view('update_delete_income_outlay_entry_api'), methods=['PUT', 'DELETE'])
+app.add_url_rule('/api/family_total_outlay_by_category',
+                 view_func=FamilyTotalOutlayByCategoryAPI.as_view('family_total_outlay_by_category_api'),
+                 methods=['GET'])
 
-
-
+# 注册 API 路由
+app.add_url_rule('/api/income_outlay_entries', view_func=IncomeOutlayEntryAPI.as_view('income_outlay_entry_api'),
+                 methods=['GET'])
+app.add_url_rule('/api/income_outlay_entries',
+                 view_func=CreateIncomeOutlayEntryAPI.as_view('create_income_outlay_entry_api'), methods=['POST'])
+app.add_url_rule('/api/income_outlay_entries/<int:entry_id>',
+                 view_func=UpdateDeleteIncomeOutlayEntryAPI.as_view('update_delete_income_outlay_entry_api'),
+                 methods=['PUT', 'DELETE'])
 
 # 注册 API 路由
 monthly_outlay_by_category_view = MonthlyOutlayByCategoryAPI.as_view('monthly_outlay_by_category_api')
 app.add_url_rule('/api/outlay/total/by_category', view_func=monthly_outlay_by_category_view, methods=['GET'])
-
 
 # 注册 API 路由
 total_surplus_view = TotalSurplusAPI.as_view('total_surplus_api')
@@ -933,8 +973,6 @@ app.add_url_rule('/api/income/total/month', view_func=monthly_income_view, metho
 # 注册 API 路由
 family_member_count_view = FamilyMemberCountAPI.as_view('family_member_count_api')
 app.add_url_rule('/api/family_members/count', view_func=family_member_count_view, methods=['GET'])
-
-
 
 # 注册 API 路由
 login_view = LoginAPI.as_view('login_api')
@@ -973,6 +1011,9 @@ app.add_url_rule('/api/outlay_classifies/', defaults={'classify_id': None}, view
 app.add_url_rule('/api/outlay_classifies/<int:classify_id>', view_func=outlay_classify_view,
                  methods=['GET', 'PUT', 'DELETE'])
 app.add_url_rule('/api/outlay_classifies/', view_func=outlay_classify_view, methods=['POST'])
+
+chat_view = ChatAPI.as_view('chat_api')
+app.add_url_rule('/api/chat', view_func=chat_view, methods=['POST'])
 
 if __name__ == '__main__':
     app.run()
