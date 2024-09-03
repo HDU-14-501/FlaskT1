@@ -833,6 +833,64 @@ class WeeklyIncomeAndOutlayByDayAPI(MethodView):
         return jsonify(data)
 
 
+class DailyOutlayByMemberAPI(MethodView):
+    def get(self):
+        # 获取所有独特的日期
+        dates = db.session.query(func.date(models.Outlay.Time).label('date')).distinct().all()
+
+        result = []
+
+        for date_row in dates:
+            date = date_row.date.isoformat()
+            daily_data = {"Date": date, "Details": []}
+
+            # 获取该日期下，每个家庭成员的支出总额
+            members = db.session.query(
+                models.FamilyMember.Membername,
+                func.sum(models.Outlay.Amount).label('TotalOutlay')
+            ).join(
+                models.Outlay, models.Outlay.Member == models.FamilyMember.Id
+            ).filter(
+                func.date(models.Outlay.Time) == date
+            ).group_by(models.FamilyMember.Membername).all()
+
+            for member_name, total_outlay in members:
+                daily_data["Details"].append({
+                    "MemberName": member_name,
+                    "TotalOutlay": total_outlay
+                })
+
+            result.append(daily_data)
+
+        return jsonify(result)
+
+
+class DailyIncomeAPI(MethodView):
+    def get(self):
+        # 查询每一天的收入总额
+        daily_incomes = db.session.query(
+            func.date(models.Income.Time).label('date'),
+            func.sum(models.Income.Amount).label('total_income')
+        ).group_by(
+            func.date(models.Income.Time)
+        ).order_by('date').all()
+
+        # 初始化返回的数据结构
+        result = []
+
+        # 将查询结果格式化为指定的输出结构
+        for income in daily_incomes:
+            result.append({
+                "Date": income.date.isoformat(),
+                "TotalIncome": income.total_income
+            })
+
+        return jsonify(result)
+
+app.add_url_rule('/api/daily_income', view_func=DailyIncomeAPI.as_view('daily_income_api'))
+
+# 将API路由添加到Flask应用程序中
+app.add_url_rule('/api/daily_outlay_by_member', view_func=DailyOutlayByMemberAPI.as_view('daily_outlay_by_member_api'))
 
 # 注册 API 路由
 app.add_url_rule('/api/weekly_income_outlay', view_func=WeeklyIncomeAndOutlayByDayAPI.as_view('weekly_income_outlay_api'), methods=['GET'])
