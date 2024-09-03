@@ -1095,8 +1095,47 @@ class MonthlyTopOutlayLocationAPI(MethodView):
         else:
             return jsonify({"Place": None, "TotalOutlay": 0})
 
-# 本月支出最多的分类
+
 class MonthlyOutlayByCategoryAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间
+        start_of_month = datetime(now.year, now.month, 1)
+
+        # 查询所有的父分类（大类）
+        parent_categories = db.session.query(models.OutlayClassify).filter(
+            models.OutlayClassify.FatherClassifyID.is_(None)).all()
+
+        # 初始化返回的数据结构
+        data = []
+
+        # 查询每个家庭成员在每个大类中的支出总额，但排除“一家之主”
+        members = db.session.query(models.FamilyMember).filter(models.FamilyMember.Membername != '一家之主').all()
+
+        for member in members:
+            member_data = {
+                "name": member.Membername,
+                "value": []
+            }
+            for category in parent_categories:
+                # 计算该成员在该大类中的支出总额
+                total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).join(
+                    models.OutlayClassify,
+                    models.Outlay.ClassifyID == models.OutlayClassify.ID
+                ).filter(
+                    models.Outlay.Member == member.Id,
+                    models.Outlay.Time >= start_of_month,
+                    models.OutlayClassify.FatherClassifyID == category.ID
+                ).scalar() or 0
+                member_data["value"].append(total_outlay)
+
+            # 将结果添加到数据中
+            data.append(member_data)
+
+        return jsonify(data)
+# 本月支出最多的分类
+class MonthlyOutlayTopCategoryAPI(MethodView):
     def get(self):
         # 获取当前时间
         now = datetime.now()
@@ -1181,7 +1220,7 @@ app.add_url_rule('/api/today_total_income', view_func=TodayTotalIncomeAPI.as_vie
 app.add_url_rule('/api/today_top_outlay_location', view_func=TodayTopOutlayLocationAPI.as_view('today_top_outlay_location_api'))
 app.add_url_rule('/api/today_top_outlay_category', view_func=TodayTopOutlayCategoryAPI.as_view('today_top_outlay_category_api'))
 app.add_url_rule('/api/monthly_top_outlay_location', view_func=MonthlyTopOutlayLocationAPI.as_view('monthly_top_outlay_location_api'))
-app.add_url_rule('/api/monthly_top_outlay_item', view_func=MonthlyOutlayByCategoryAPI.as_view('monthly_top_outlay_item_api'))
+app.add_url_rule('/api/monthly_top_outlay_item', view_func=MonthlyOutlayTopCategoryAPI.as_view('monthly_top_outlay_item_api'))
 
 
 # 添加API路由
