@@ -927,6 +927,209 @@ class ChatAPI(MethodView):
         except Exception as e:
             return jsonify({"code": 50000, "message": str(e)}), HTTPStatus.INTERNAL_SERVER_ERROR
 
+# 统计本月平均日支出
+class MonthlyAverageDailyOutlayAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月总支出和天数
+        total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time < end_of_month
+        ).scalar() or 0
+
+        # 计算本月已经过去的天数
+        days_past = (now - start_of_month).days + 1
+
+        # 计算平均日支出
+        avg_daily_outlay = total_outlay / days_past
+
+        return jsonify({"AverageDailyOutlay": avg_daily_outlay})
+
+# 统计本月总收入
+class MonthlyTotalIncomeAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月收入总额
+        total_income = db.session.query(db.func.sum(models.Income.Amount)).filter(
+            models.Income.Time >= start_of_month,
+            models.Income.Time < end_of_month
+        ).scalar() or 0
+
+        return jsonify({"TotalIncome": total_income})
+
+# 统计本月总支出
+class MonthlyTotalOutlayAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月支出总额
+        total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time < end_of_month
+        ).scalar() or 0
+
+        return jsonify({"TotalOutlay": total_outlay})
+
+# 统计本月盈余
+class MonthlySurplusAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月收入总额
+        total_income = db.session.query(db.func.sum(models.Income.Amount)).filter(
+            models.Income.Time >= start_of_month,
+            models.Income.Time < end_of_month
+        ).scalar() or 0
+
+        # 查询本月支出总额
+        total_outlay = db.session.query(db.func.sum(models.Outlay.Amount)).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time < end_of_month
+        ).scalar() or 0
+
+        # 计算盈余
+        surplus = total_income - total_outlay
+
+        return jsonify({"Surplus": surplus})
+
+# 今日支出最多的地点
+class TodayTopOutlayLocationAPI(MethodView):
+    def get(self):
+        # 获取当前日期
+        today = datetime.now().date()
+
+        # 查询今日支出最多的地点
+        top_location = db.session.query(
+            models.Outlay.Place,
+            db.func.sum(models.Outlay.Amount).label('total_outlay')
+        ).filter(
+            func.date(models.Outlay.Time) == today
+        ).group_by(models.Outlay.Place).order_by(db.func.sum(models.Outlay.Amount).desc()).first()
+
+        if top_location:
+            return jsonify({"Place": top_location.Place, "TotalOutlay": top_location.total_outlay})
+        else:
+            return jsonify({"Place": None, "TotalOutlay": 0})
+
+
+# 今日支出最多的分类
+class TodayTopOutlayCategoryAPI(MethodView):
+    def get(self):
+        # 获取当前日期
+        today = datetime.now().date()
+
+        # 查询所有的大类
+        parent_categories = db.session.query(
+            models.OutlayClassify.ID,
+            models.OutlayClassify.Name
+        ).filter(models.OutlayClassify.FatherClassifyID.is_(None)).all()
+
+        # 初始化一个变量来存储支出最多的大类和金额
+        top_category = {"Category": None, "TotalOutlay": 0}
+
+        # 遍历每个大类，计算其当天的总支出
+        for category in parent_categories:
+            # 获取该大类的所有子类ID
+            subcategory_ids = db.session.query(models.OutlayClassify.ID).filter(
+                models.OutlayClassify.FatherClassifyID == category.ID
+            ).all()
+            subcategory_ids = [id for (id,) in subcategory_ids]
+
+            # 计算该大类当天的总支出，包括其所有子类的支出
+            total_outlay = db.session.query(
+                db.func.sum(models.Outlay.Amount)
+            ).filter(
+                models.Outlay.ClassifyID.in_(subcategory_ids),
+                func.date(models.Outlay.Time) == today
+            ).scalar() or 0
+
+            # 更新支出最多的大类
+            if total_outlay > top_category["TotalOutlay"]:
+                top_category = {"Category": category.Name, "TotalOutlay": total_outlay}
+
+        return jsonify(top_category)
+
+
+# 本月支出最多的地点
+class MonthlyTopOutlayLocationAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月支出最多的地点
+        top_location = db.session.query(
+            models.Outlay.Place,
+            db.func.sum(models.Outlay.Amount).label('total_outlay')
+        ).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time < end_of_month
+        ).group_by(models.Outlay.Place).order_by(db.func.sum(models.Outlay.Amount).desc()).first()
+
+        if top_location:
+            return jsonify({"Place": top_location.Place, "TotalOutlay": top_location.total_outlay})
+        else:
+            return jsonify({"Place": None, "TotalOutlay": 0})
+
+# 本月支出最多的项目
+class MonthlyTopOutlayItemAPI(MethodView):
+    def get(self):
+        # 获取当前时间
+        now = datetime.now()
+        # 计算本月的起始时间和结束时间
+        start_of_month = datetime(now.year, now.month, 1)
+        end_of_month = datetime(now.year, now.month + 1, 1) if now.month < 12 else datetime(now.year + 1, 1, 1)
+
+        # 查询本月支出最多的分类
+        top_item = db.session.query(
+            models.OutlayClassify.Name,
+            db.func.sum(models.Outlay.Amount).label('total_outlay')
+        ).join(
+            models.OutlayClassify, models.Outlay.ClassifyID == models.OutlayClassify.ID
+        ).filter(
+            models.Outlay.Time >= start_of_month,
+            models.Outlay.Time < end_of_month
+        ).group_by(models.OutlayClassify.Name).order_by(db.func.sum(models.Outlay.Amount).desc()).first()
+
+        if top_item:
+            return jsonify({"Item": top_item.Name, "TotalOutlay": top_item.total_outlay})
+        else:
+            return jsonify({"Item": None, "TotalOutlay": 0})
+
+# 添加API路由
+app.add_url_rule('/api/today_top_outlay_location', view_func=TodayTopOutlayLocationAPI.as_view('today_top_outlay_location_api'))
+app.add_url_rule('/api/today_top_outlay_category', view_func=TodayTopOutlayCategoryAPI.as_view('today_top_outlay_category_api'))
+app.add_url_rule('/api/monthly_top_outlay_location', view_func=MonthlyTopOutlayLocationAPI.as_view('monthly_top_outlay_location_api'))
+app.add_url_rule('/api/monthly_top_outlay_item', view_func=MonthlyTopOutlayItemAPI.as_view('monthly_top_outlay_item_api'))
+
+
+# 添加API路由
+app.add_url_rule('/api/monthly_average_daily_outlay', view_func=MonthlyAverageDailyOutlayAPI.as_view('monthly_average_daily_outlay_api'))
+app.add_url_rule('/api/monthly_total_income', view_func=MonthlyTotalIncomeAPI.as_view('monthly_total_income_api'))
+app.add_url_rule('/api/monthly_total_outlay', view_func=MonthlyTotalOutlayAPI.as_view('monthly_total_outlay_api'))
+app.add_url_rule('/api/monthly_surplus', view_func=MonthlySurplusAPI.as_view('monthly_surplus_api'))
+
+
 app.add_url_rule('/api/daily_income', view_func=DailyIncomeAPI.as_view('daily_income_api'))
 
 # 将API路由添加到Flask应用程序中
