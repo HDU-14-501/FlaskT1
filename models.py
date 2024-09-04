@@ -158,6 +158,8 @@ class RealEstate(db.Model):
     Tenant = db.Column(db.String(100), comment='租户')
     LeaseEndDate = db.Column(db.Date, comment='租期截止日期')
     RentDueDay = db.Column(db.Integer, comment='交租日期（每月第几日）')
-    IsAvailableForRent = db.Column(db.Boolean, comment='可否租用')
+    IsAvailableForRent = db.Column(db.Integer, nullable=False, default=True, comment='是否可租用')
     ImageURL = db.Column(db.String(255), comment='房屋图片URL')
+    Title = db.Column(db.String(255), nullable=False, comment='房屋标题')  # 新添加的字段
+
 

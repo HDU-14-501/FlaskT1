@@ -1222,6 +1222,7 @@ class RealEstateAPI(MethodView):
                 abort(404, description="Real estate not found")
             return jsonify({
                 'ID': real_estate.ID,
+                'Title': real_estate.Title,  # 添加 Title 字段
                 'Address': real_estate.Address,
                 'Owner': real_estate.Owner,
                 'PurchaseDate': real_estate.PurchaseDate.isoformat(),
@@ -1238,6 +1239,7 @@ class RealEstateAPI(MethodView):
             real_estates = models.RealEstate.query.all()
             return jsonify([{
                 'ID': real_estate.ID,
+                'Title': real_estate.Title,  # 添加 Title 字段
                 'Address': real_estate.Address,
                 'Owner': real_estate.Owner,
                 'PurchaseDate': real_estate.PurchaseDate.isoformat(),
@@ -1253,10 +1255,11 @@ class RealEstateAPI(MethodView):
 
     def post(self):
         data = request.get_json()
-        if not data or not all(key in data for key in ['Address', 'Owner', 'PurchaseDate', 'PurchaseAmount']):
+        if not data or not all(key in data for key in ['Address', 'Owner', 'PurchaseDate', 'PurchaseAmount', 'Title']):
             abort(400, description="Missing required fields")
 
         new_real_estate = models.RealEstate(
+            Title=data['Title'],  # 添加 Title 字段
             Address=data['Address'],
             Owner=data['Owner'],
             PurchaseDate=datetime.fromisoformat(data['PurchaseDate']),
@@ -1279,6 +1282,8 @@ class RealEstateAPI(MethodView):
             abort(404, description="Real estate not found")
 
         data = request.get_json()
+        if 'Title' in data:  # 更新 Title 字段
+            real_estate.Title = data['Title']
         if 'Address' in data:
             real_estate.Address = data['Address']
         if 'Owner' in data:
