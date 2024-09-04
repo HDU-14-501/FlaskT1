@@ -144,3 +144,20 @@ def init_db_data():
     # 提交数据
     db.session.commit()
     print("数据库已初始化测试数据")
+
+
+class RealEstate(db.Model):
+    __tablename__ = 'RealEstate'  # 指定表名
+    ID = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    Address = db.Column(db.String(255), nullable=False, comment='房屋所在地址')
+    Owner = db.Column(db.String(100), nullable=False, comment='房屋所有人')
+    PurchaseDate = db.Column(db.Date, nullable=False, comment='购入时间')
+    PurchaseAmount = db.Column(db.Numeric(15, 2), nullable=False, comment='购入金额')
+    BasicInfo = db.Column(db.Text, comment='房屋基本信息')
+    Rent = db.Column(db.Numeric(10, 2), comment='租金')
+    Tenant = db.Column(db.String(100), comment='租户')
+    LeaseEndDate = db.Column(db.Date, comment='租期截止日期')
+    RentDueDay = db.Column(db.Integer, comment='交租日期（每月第几日）')
+    IsAvailableForRent = db.Column(db.Boolean, comment='可否租用')
+    ImageURL = db.Column(db.String(255), comment='房屋图片URL')
+

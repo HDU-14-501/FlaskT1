@@ -1213,6 +1213,114 @@ class TodayTotalIncomeAPI(MethodView):
 
         return jsonify({"TotalIncome": total_income})
 
+
+class RealEstateAPI(MethodView):
+    def get(self, real_estate_id=None):
+        if real_estate_id:
+            real_estate = models.RealEstate.query.get(real_estate_id)
+            if not real_estate:
+                abort(404, description="Real estate not found")
+            return jsonify({
+                'ID': real_estate.ID,
+                'Address': real_estate.Address,
+                'Owner': real_estate.Owner,
+                'PurchaseDate': real_estate.PurchaseDate.isoformat(),
+                'PurchaseAmount': real_estate.PurchaseAmount,
+                'BasicInfo': real_estate.BasicInfo,
+                'Rent': real_estate.Rent,
+                'Tenant': real_estate.Tenant,
+                'LeaseEndDate': real_estate.LeaseEndDate.isoformat() if real_estate.LeaseEndDate else None,
+                'RentDueDay': real_estate.RentDueDay,
+                'IsAvailableForRent': real_estate.IsAvailableForRent,
+                'ImageURL': real_estate.ImageURL
+            })
+        else:
+            real_estates = models.RealEstate.query.all()
+            return jsonify([{
+                'ID': real_estate.ID,
+                'Address': real_estate.Address,
+                'Owner': real_estate.Owner,
+                'PurchaseDate': real_estate.PurchaseDate.isoformat(),
+                'PurchaseAmount': real_estate.PurchaseAmount,
+                'BasicInfo': real_estate.BasicInfo,
+                'Rent': real_estate.Rent,
+                'Tenant': real_estate.Tenant,
+                'LeaseEndDate': real_estate.LeaseEndDate.isoformat() if real_estate.LeaseEndDate else None,
+                'RentDueDay': real_estate.RentDueDay,
+                'IsAvailableForRent': real_estate.IsAvailableForRent,
+                'ImageURL': real_estate.ImageURL
+            } for real_estate in real_estates])
+
+    def post(self):
+        data = request.get_json()
+        if not data or not all(key in data for key in ['Address', 'Owner', 'PurchaseDate', 'PurchaseAmount']):
+            abort(400, description="Missing required fields")
+
+        new_real_estate = models.RealEstate(
+            Address=data['Address'],
+            Owner=data['Owner'],
+            PurchaseDate=datetime.fromisoformat(data['PurchaseDate']),
+            PurchaseAmount=data['PurchaseAmount'],
+            BasicInfo=data.get('BasicInfo'),
+            Rent=data.get('Rent'),
+            Tenant=data.get('Tenant'),
+            LeaseEndDate=datetime.fromisoformat(data['LeaseEndDate']) if 'LeaseEndDate' in data else None,
+            RentDueDay=data.get('RentDueDay'),
+            IsAvailableForRent=data.get('IsAvailableForRent', True),
+            ImageURL=data.get('ImageURL')
+        )
+        db.session.add(new_real_estate)
+        db.session.commit()
+        return jsonify({'message': 'Real estate created successfully'}), 201
+
+    def put(self, real_estate_id):
+        real_estate = models.RealEstate.query.get(real_estate_id)
+        if not real_estate:
+            abort(404, description="Real estate not found")
+
+        data = request.get_json()
+        if 'Address' in data:
+            real_estate.Address = data['Address']
+        if 'Owner' in data:
+            real_estate.Owner = data['Owner']
+        if 'PurchaseDate' in data:
+            real_estate.PurchaseDate = datetime.fromisoformat(data['PurchaseDate'])
+        if 'PurchaseAmount' in data:
+            real_estate.PurchaseAmount = data['PurchaseAmount']
+        if 'BasicInfo' in data:
+            real_estate.BasicInfo = data['BasicInfo']
+        if 'Rent' in data:
+            real_estate.Rent = data['Rent']
+        if 'Tenant' in data:
+            real_estate.Tenant = data['Tenant']
+        if 'LeaseEndDate' in data:
+            real_estate.LeaseEndDate = datetime.fromisoformat(data['LeaseEndDate'])
+        if 'RentDueDay' in data:
+            real_estate.RentDueDay = data['RentDueDay']
+        if 'IsAvailableForRent' in data:
+            real_estate.IsAvailableForRent = data['IsAvailableForRent']
+        if 'ImageURL' in data:
+            real_estate.ImageURL = data['ImageURL']
+
+        db.session.commit()
+        return jsonify({'message': 'Real estate updated successfully'})
+
+    def delete(self, real_estate_id):
+        real_estate = models.RealEstate.query.get(real_estate_id)
+        if not real_estate:
+            abort(404, description="Real estate not found")
+        db.session.delete(real_estate)
+        db.session.commit()
+        return jsonify({'message': 'Real estate deleted successfully'})
+
+
+# 注册 RealEstate API 路由
+real_estate_view = RealEstateAPI.as_view('real_estate_api')
+app.add_url_rule('/api/real_estates/', defaults={'real_estate_id': None}, view_func=real_estate_view, methods=['GET'])
+app.add_url_rule('/api/real_estates/<int:real_estate_id>', view_func=real_estate_view, methods=['GET', 'PUT', 'DELETE'])
+app.add_url_rule('/api/real_estates/', view_func=real_estate_view, methods=['POST'])
+
+
 # 注册 API 路由
 app.add_url_rule('/api/today_total_income', view_func=TodayTotalIncomeAPI.as_view('today_total_income_api'))
 
